@@ -28,12 +28,13 @@ Use the `-pem-name` if the nem of your pem files is different then the default (
 
 The following shellscript will renew the certificates which will expire in 1 week. It assumes that the letsencrypt-expiring-certs binary can be found in the PATH.
 
-```
+```sh
 #!/bin/sh
 
 DOMAINS=""
 
 EXPIRE_DATE=`date --date='1 week'`
+LETSENCRYPT="/path/to/letsencrypt/letsencrypt-auto"
 
 for i in `letsencrypt-expiring-certs -expire "$EXPIRE_DATE"`;do
 	DOMAINS="$DOMAINS -d $i"
@@ -42,6 +43,6 @@ done
 
 echo $DOMAINS
 DIR=/tmp/letsencrypt-auto
-mkdir -p $DIR && /home/ajnasz/src/letsencrypt/letsencrypt-auto --renew certonly --server https://acme-v01.api.letsencrypt.org/directory -a webroot --webroot-path=$DIR --agree-tos $DOMAINS
+mkdir -p $DIR && $LETSENCRYPT --renew certonly --server https://acme-v01.api.letsencrypt.org/directory -a webroot --webroot-path=$DIR --agree-tos $DOMAINS
 service nginx reload
 ```
