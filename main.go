@@ -32,14 +32,18 @@ func getCertDirectoryNames(dir string) []string {
 	return names
 }
 
-func getPem(dir string) *pem.Block {
+func readPem(dir string) []byte {
 	f, err := ioutil.ReadFile(path.Join(dir, pemName))
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	block, _ := pem.Decode(f)
+	return f
+}
+
+func getPem(pemContent []byte) *pem.Block {
+	block, _ := pem.Decode(pemContent)
 
 	if block == nil {
 		log.Fatal("Failed parse cert pem")
@@ -59,7 +63,7 @@ func parseCert(bytes []byte) *x509.Certificate {
 }
 
 func filterExpiringCerts(certs []*x509.Certificate, expire time.Time) []*x509.Certificate {
-	var output []*x509.Certificate
+	output := make([]*x509.Certificate, 0, len(certs))
 
 	for _, cert := range certs {
 		if cert.NotAfter.Before(expire) {
@@ -68,6 +72,59 @@ func filterExpiringCerts(certs []*x509.Certificate, expire time.Time) []*x509.Ce
 	}
 
 	return output
+}
+
+func getDefaultExpireTime() time.Time {
+	return time.Now().Add(time.Hour * 24 * 7 * 2)
+}
+
+func getUserDefinedExpireTime(expireTime string) time.Time {
+	expire, err := time.Parse(time.UnixDate, expireTime)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return expire
+}
+
+func getExpireTime(expireTime string) time.Time {
+	if expireTime == "" {
+		return getDefaultExpireTime()
+	} else {
+		return getUserDefinedExpireTime(expireTime)
+	}
+}
+
+func getCertificates(dirs []string) []*x509.Certificate {
+	certificates := make([]*x509.Certificate, len(dirs))
+
+	for index, dir := range dirs {
+		certPath := path.Join(certsRoot, dir)
+		cert := parseCert(getPem(readPem(certPath)).Bytes)
+
+		certificates[index] = cert
+	}
+
+	return certificates
+}
+
+func collectDomains(expiringCerts []*x509.Certificate) []string {
+	var domains []string
+
+	for _, cert := range expiringCerts {
+		for _, domain := range cert.DNSNames {
+			domains = append(domains, domain)
+		}
+	}
+
+	return domains
+}
+
+func printDomains(domains []string) {
+	for _, domain := range domains {
+		fmt.Println(domain)
+	}
 }
 
 func init() {
@@ -79,35 +136,15 @@ func init() {
 }
 
 func main() {
-	var expire time.Time
-
-	if expireTime == "" {
-		expire = time.Now().Add(time.Hour * 24 * 7 * 2)
-	} else {
-		var err error
-		expire, err = time.Parse(time.UnixDate, expireTime)
-
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
+	expire := getExpireTime(expireTime)
 
 	dirs := getCertDirectoryNames(certsRoot)
 
-	var certikek []*x509.Certificate
+	certificates := getCertificates(dirs)
 
-	for _, dir := range dirs {
-		certPath := path.Join(certsRoot, dir)
-		cert := parseCert(getPem(certPath).Bytes)
+	expiringCerts := filterExpiringCerts(certificates, expire)
 
-		certikek = append(certikek, cert)
-	}
+	domains := collectDomains(expiringCerts)
 
-	expiringCerts := filterExpiringCerts(certikek, expire)
-
-	for _, cert := range expiringCerts {
-		for _, domain := range cert.DNSNames {
-			fmt.Println(domain)
-		}
-	}
+	printDomains(domains)
 }
