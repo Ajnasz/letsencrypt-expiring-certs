@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"strings"
 	"time"
 )
 
@@ -109,21 +110,19 @@ func getCertificates(dirs []string) []*x509.Certificate {
 	return certificates
 }
 
-func collectDomains(expiringCerts []*x509.Certificate) []string {
-	var domains []string
+func collectDomains(expiringCerts []*x509.Certificate) [][]string {
+	domains := make([][]string, 0, len(expiringCerts))
 
 	for _, cert := range expiringCerts {
-		for _, domain := range cert.DNSNames {
-			domains = append(domains, domain)
-		}
+		domains = append(domains, cert.DNSNames)
 	}
 
 	return domains
 }
 
-func printDomains(domains []string) {
+func printDomains(domains [][]string) {
 	for _, domain := range domains {
-		fmt.Println(domain)
+		fmt.Println(strings.Join(domain, " "))
 	}
 }
 
