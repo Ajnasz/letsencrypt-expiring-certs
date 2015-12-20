@@ -89,7 +89,9 @@ main() {
 
 	echo $LINES | while read LINE; do
 		DOMAINS=`line_to_domains $LINE`
-		renew_domains $DOMAINS
+		if [ ! -z "$DOMAINS" ];then
+			renew_domains $DOMAINS
+		fi
 	done
 
 	reload_services
