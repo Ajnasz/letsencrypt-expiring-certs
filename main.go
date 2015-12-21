@@ -17,6 +17,45 @@ var pemName string
 var certsRoot string
 var expireTime string
 
+type CertPem struct {
+	Cert *x509.Certificate
+	Pem  []byte
+}
+
+func (certPem *CertPem) GetCertPool() *x509.CertPool {
+	pool := x509.NewCertPool()
+
+	ok := pool.AppendCertsFromPEM(certPem.Pem)
+
+	if !ok {
+		log.Fatal("Couldn't add pem")
+	}
+
+	return pool
+}
+
+func NewCertPem(pem []byte) CertPem {
+	certPem := CertPem{
+		Pem: pem,
+	}
+
+	certPem.ParseCert()
+
+	return certPem
+}
+
+func (certPem *CertPem) ParseCert() {
+	block, _ := pem.Decode(certPem.Pem)
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	certPem.Cert = cert
+}
+
 func getCertDirectoryNames(dir string) []string {
 	f, err := os.Open(dir)
 
@@ -43,32 +82,18 @@ func readPem(dir string) []byte {
 	return f
 }
 
-func getPem(pemContent []byte) *pem.Block {
-	block, _ := pem.Decode(pemContent)
-
-	if block == nil {
-		log.Fatal("Failed parse cert pem")
-	}
-
-	return block
-}
-
-func parseCert(bytes []byte) *x509.Certificate {
-	cert, err := x509.ParseCertificate(bytes)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return cert
-}
-
-func filterExpiringCerts(certs []*x509.Certificate, expire time.Time) []*x509.Certificate {
+func filterExpiringCerts(certs []CertPem, expire time.Time) []*x509.Certificate {
 	output := make([]*x509.Certificate, 0, len(certs))
 
 	for _, cert := range certs {
-		if cert.NotAfter.Before(expire) {
-			output = append(output, cert)
+
+		verifyOptions := x509.VerifyOptions{
+			CurrentTime:   expire,
+			Intermediates: cert.GetCertPool(),
+		}
+
+		if _, err := cert.Cert.Verify(verifyOptions); err != nil {
+			output = append(output, cert.Cert)
 		}
 	}
 
@@ -97,14 +122,16 @@ func getExpireTime(expireTime string) time.Time {
 	}
 }
 
-func getCertificates(dirs []string) []*x509.Certificate {
-	certificates := make([]*x509.Certificate, len(dirs))
+func getCertificates(dirs []string) []CertPem {
+	certificates := make([]CertPem, len(dirs))
 
 	for index, dir := range dirs {
 		certPath := path.Join(certsRoot, dir)
-		cert := parseCert(getPem(readPem(certPath)).Bytes)
+		pem := readPem(certPath)
 
-		certificates[index] = cert
+		certPem := NewCertPem(pem)
+
+		certificates[index] = certPem
 	}
 
 	return certificates
@@ -135,6 +162,7 @@ func init() {
 }
 
 func main() {
+
 	expire := getExpireTime(expireTime)
 
 	dirs := getCertDirectoryNames(certsRoot)
