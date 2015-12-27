@@ -2,6 +2,33 @@
 
 The tool helps to renew letsencrypt certiicates from cron
 
+## Install
+
+The tool is written in go, so you will need a go compiler.
+
+It's often shipped with Linux distribution, for example on debian you can install the _golang_ package:
+
+```sh
+$ sudo apt-get install golang
+```
+
+Then to install the tool run the following command:
+
+```
+$ export GOPATH="$HOME/gocode";
+$ go get github.com/Ajnasz/letsencrypt-expiring-certs
+```
+
+This will download and also compile the code:
+
+In the _$HOME/gocode/bin/_ folder you will find the binary.
+
+In the _gocode/src/github.com/Ajnasz/letsencrypt-expiring-certs/_ folder you will find the source code.
+
+In the folder of the source code you can build tool again by using the `go build` command.
+
+If you use other OS then Linux or other distribution, read the documenatition: https://golang.org/doc/install
+
 ## Usage
 
 List domains with expired certificates
