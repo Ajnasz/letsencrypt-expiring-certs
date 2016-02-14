@@ -156,7 +156,7 @@ func printDomains(domains [][]string) {
 func init() {
 	flag.StringVar(&pemName, "pem-name", "fullchain.pem", "The name of the pem file, usually fullchain.pem")
 	flag.StringVar(&certsRoot, "certs-path", "/etc/letsencrypt/live", "The path to the directory which stores the certificates")
-	flag.StringVar(&expireTime, "expire", "", "Expire time of the certificates in unix date format (run date command \"$(date --date='15/03/2016')\"), eg.: Mon Dec 14 13:36:37 CET 2015")
+	flag.StringVar(&expireTime, "expire", "", "Expire time of the certificates in unix date format (run date command \"$(date --date='03/15/2016')\"), eg.: Tue Mar 15 11:28:00 CET 2016")
 
 	flag.Parse()
 }
