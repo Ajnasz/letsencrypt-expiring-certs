@@ -58,13 +58,13 @@ Make sure every path is correct in the script.
 
 ## Download
 
-You can download prebuild binary from the following link: http://bit.ly/1m4Xus1
+You can download prebuild binary from the following link: http://bit.ly/1U1JqfO
 sha1: http://bit.ly/1mkl9V9
 
 Download the file, check if the file not damaged:
 
 ```sh
-$ wget http://bit.ly/1m4Xus1
+$ wget http://bit.ly/1U1JqfO
 $ wget http://bit.ly/1mkl9V9
 $ sha1sum -c sha1.sum
 ```
@@ -72,7 +72,7 @@ $ sha1sum -c sha1.sum
 Unzip and make the file executable:
 
 ```sh
-$ gunzip letsencrypt-expiring-certs.2.0.1.gz
-$ chmod +x letsencrypt-expiring-certs.2.0.1
-$ mv letsencrypt-expiring-certs.2.0.1 letsencrypt-expiring-certs
+$ gunzip letsencrypt-expiring-certs.2.0.2.gz
+$ chmod +x letsencrypt-expiring-certs.2.0.2
+$ mv letsencrypt-expiring-certs.2.0.2 letsencrypt-expiring-certs
 ```
