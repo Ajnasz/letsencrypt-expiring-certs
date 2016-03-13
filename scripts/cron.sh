@@ -8,7 +8,7 @@ DRY=1 # TODO Change to 0 in production
 DIR=/tmp/letsencrypt-auto
 crete_temp_folder() {
 	echo "Create temporary folder"
-	if dry_mode;then
+	if is_dry;then
 		return
 	fi
 
@@ -87,8 +87,11 @@ main() {
 	check_letsencrypt
 	LINES=`get_lines` || exit $?
 
+	crete_temp_folder
+
 	echo $LINES | while read LINE; do
 		DOMAINS=`line_to_domains $LINE`
+
 		if [ ! -z "$DOMAINS" ];then
 			renew_domains $DOMAINS
 		fi
