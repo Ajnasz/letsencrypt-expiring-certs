@@ -24,7 +24,7 @@ crete_temp_folder() {
 reload_services() {
 	echo "Reload nginx"
 	if ! is_dry;then
-		service nginx reload
+		/usr/sbin/service nginx reload
 	fi
 }
 
