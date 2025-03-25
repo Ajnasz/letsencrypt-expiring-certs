@@ -20,6 +20,7 @@ var certsRoot string
 var expireTime string
 var printDate bool
 var domains string
+var quit bool
 
 type CertPem struct {
 	Cert *x509.Certificate
@@ -204,6 +205,7 @@ func init() {
 	flag.StringVar(&expireTime, "expire", "", "Expire time of the certificates (run date command \"$(date -Im --date='03/15/2016')\"), eg.: 2016-03-15T00+01:00. If empty, 2 weeks from now will be used")
 	flag.BoolVar(&printDate, "print-date", false, "Print the expiration date of the certificates")
 	flag.StringVar(&domains, "domains", "", "Comma separated list of domains to check")
+	flag.BoolVar(&quit, "quit", false, "Quit the program with a non 0 exit code after printing the expiring certificates, if there are any")
 
 	flag.Parse()
 }
@@ -250,4 +252,8 @@ func main() {
 
 	expiredDomains := getExpiredDomains(expire)
 	printExpiringCerts(expiredDomains, printDate)
+
+	if quit && len(expiredDomains) > 0 {
+		os.Exit(1)
+	}
 }
