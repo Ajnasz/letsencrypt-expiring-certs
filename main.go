@@ -167,14 +167,23 @@ func getCertificates(dirs []string) []CertPem {
 	return certificates
 }
 
-func collectDomains(expiringCerts []*x509.Certificate) [][]string {
-	domains := make([][]string, 0, len(expiringCerts))
+type ExpiringCert struct {
+	Domains []string
+	Expire  time.Time
+}
+
+func collectExpirations(expiringCerts []*x509.Certificate) []ExpiringCert {
+	expires := make([]ExpiringCert, 0, len(expiringCerts))
 
 	for _, cert := range expiringCerts {
-		domains = append(domains, cert.DNSNames)
+		expiringCert := ExpiringCert{
+			Domains: cert.DNSNames,
+			Expire:  cert.NotAfter,
+		}
+		expires = append(expires, expiringCert)
 	}
 
-	return domains
+	return expires
 }
 
 func printDomains(domains [][]string) {
@@ -214,7 +223,7 @@ func main() {
 
 	expiringCerts := filterExpiringCerts(certificates, expire)
 
-	domains := collectDomains(expiringCerts)
+	domains := collectExpirations(expiringCerts)
 
-	printDomains(domains)
+	printExpiringCerts(domains)
 }
