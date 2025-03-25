@@ -121,19 +121,32 @@ func getDefaultExpireTime() time.Time {
 	return time.Now().Add(time.Hour * 24 * 7 * 2)
 }
 
-func getUserDefinedExpireTime(expireTime string) time.Time {
-	expire, err := time.Parse(time.UnixDate, expireTime)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return expire
+var dateFormats = []string{
+	time.UnixDate,
+	time.RFC3339,
+	time.RFC3339Nano,
+	time.RFC1123,
+	time.RFC1123Z,
+	time.RFC822,
+	time.RFC822Z,
+	time.RFC850,
+	time.RFC1123Z,
 }
 
-func getExpireTime(expireTime string) time.Time {
+func getUserDefinedExpireTime(expireTime string) (time.Time, error) {
+	for _, format := range dateFormats {
+		expire, err := time.Parse(format, expireTime)
+		if err == nil {
+			return expire, nil
+		}
+	}
+
+	return time.Time{}, nil
+}
+
+func getExpireTime(expireTime string) (time.Time, error) {
 	if expireTime == "" {
-		return getDefaultExpireTime()
+		return getDefaultExpireTime(), nil
 	} else {
 		return getUserDefinedExpireTime(expireTime)
 	}
@@ -170,17 +183,30 @@ func printDomains(domains [][]string) {
 	}
 }
 
+func printExpiringCerts(expiringCerts []ExpiringCert) {
+	for _, cert := range expiringCerts {
+		for _, domain := range cert.Domains {
+			fmt.Printf("%s\t%s", domain, cert.Expire.Format(time.RFC3339))
+			fmt.Println()
+		}
+	}
+}
+
 func init() {
 	flag.StringVar(&pemName, "pem-name", "fullchain.pem", "The name of the pem file, usually fullchain.pem")
 	flag.StringVar(&certsRoot, "certs-path", "/etc/letsencrypt/live", "The path to the directory which stores the certificates")
-	flag.StringVar(&expireTime, "expire", "", "Expire time of the certificates in unix date format (run date command \"$(date --date='03/15/2016')\"), eg.: Tue Mar 15 11:28:00 CET 2016")
+	flag.StringVar(&expireTime, "expire", getDefaultExpireTime().Format(time.RFC3339), "Expire time of the certificates (run date command \"$(date -Ih --date='03/15/2016')\"), eg.: 2016-03-15T00+01:00")
 
 	flag.Parse()
 }
 
 func main() {
 
-	expire := getExpireTime(expireTime)
+	expire, err := getExpireTime(expireTime)
+
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	dirs := getCertDirectoryNames(certsRoot)
 
