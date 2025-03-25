@@ -5,7 +5,6 @@ import (
 	"encoding/pem"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path"
@@ -56,6 +55,16 @@ func (certPem *CertPem) ParseCert() {
 	certPem.Cert = cert
 }
 
+func isDir(name string) bool {
+	f, err := os.Stat(name)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return f.IsDir()
+}
+
 func getCertDirectoryNames(dir string) []string {
 	f, err := os.Open(dir)
 
@@ -69,11 +78,19 @@ func getCertDirectoryNames(dir string) []string {
 		log.Fatal(err)
 	}
 
-	return names
+	var dirs []string
+
+	for index, name := range names {
+		if isDir(path.Join(dir, name)) {
+			dirs = append(dirs, names[index])
+		}
+	}
+
+	return dirs
 }
 
 func readPem(dir string) []byte {
-	f, err := ioutil.ReadFile(path.Join(dir, pemName))
+	f, err := os.ReadFile(path.Join(dir, pemName))
 
 	if err != nil {
 		log.Fatal(err)
