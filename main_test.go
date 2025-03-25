@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/x509"
 	"testing"
-	"time"
 )
 
 func TestCollectDomains(t *testing.T) {
@@ -16,7 +15,7 @@ func TestCollectDomains(t *testing.T) {
 		DNSNames: []string{"foo.qux", "foo.norf"},
 	})
 
-	collectedDomains := collectDomains(data)
+	collectedDomains := collectExpirations(data)
 
 	actual := len(collectedDomains)
 	expected := len(data)
@@ -31,19 +30,5 @@ func TestCollectDomains(t *testing.T) {
 		if actual != expected {
 			t.Fatal("Collected domains length is different than cert.DNSNames")
 		}
-	}
-}
-
-func TestGetDefaultExpireTime(t *testing.T) {
-	actual := getDefaultExpireTime()
-
-	now := time.Now()
-
-	actual = actual.Truncate(time.Hour)
-
-	expected := now.Truncate(time.Hour).AddDate(0, 0, 14)
-
-	if actual != expected {
-		t.Fatal("Default expire time should be 2 weeks", actual, expected)
 	}
 }

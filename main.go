@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
 	"flag"
@@ -10,11 +11,15 @@ import (
 	"path"
 	"strings"
 	"time"
+
+	"github.com/Ajnasz/letsencrypt-expiring-certs/expiration_time"
 )
 
 var pemName string
 var certsRoot string
 var expireTime string
+var printDate bool
+var domains string
 
 type CertPem struct {
 	Cert *x509.Certificate
@@ -117,41 +122,6 @@ func filterExpiringCerts(certs []CertPem, expire time.Time) []*x509.Certificate 
 	return output
 }
 
-func getDefaultExpireTime() time.Time {
-	return time.Now().Add(time.Hour * 24 * 7 * 2)
-}
-
-var dateFormats = []string{
-	time.UnixDate,
-	time.RFC3339,
-	time.RFC3339Nano,
-	time.RFC1123,
-	time.RFC1123Z,
-	time.RFC822,
-	time.RFC822Z,
-	time.RFC850,
-	time.RFC1123Z,
-}
-
-func getUserDefinedExpireTime(expireTime string) (time.Time, error) {
-	for _, format := range dateFormats {
-		expire, err := time.Parse(format, expireTime)
-		if err == nil {
-			return expire, nil
-		}
-	}
-
-	return time.Time{}, nil
-}
-
-func getExpireTime(expireTime string) (time.Time, error) {
-	if expireTime == "" {
-		return getDefaultExpireTime(), nil
-	} else {
-		return getUserDefinedExpireTime(expireTime)
-	}
-}
-
 func getCertificates(dirs []string) []CertPem {
 	certificates := make([]CertPem, len(dirs))
 
@@ -192,38 +162,92 @@ func printDomains(domains [][]string) {
 	}
 }
 
-func printExpiringCerts(expiringCerts []ExpiringCert) {
+func printExpiringCerts(expiringCerts []ExpiringCert, printDate bool) {
 	for _, cert := range expiringCerts {
 		for _, domain := range cert.Domains {
-			fmt.Printf("%s\t%s", domain, cert.Expire.Format(time.RFC3339))
+			if printDate {
+				fmt.Printf("%s\t%s", domain, cert.Expire.Format(time.RFC3339))
+			} else {
+				fmt.Printf("%s", domain)
+			}
 			fmt.Println()
 		}
 	}
 }
 
-func init() {
-	flag.StringVar(&pemName, "pem-name", "fullchain.pem", "The name of the pem file, usually fullchain.pem")
-	flag.StringVar(&certsRoot, "certs-path", "/etc/letsencrypt/live", "The path to the directory which stores the certificates")
-	flag.StringVar(&expireTime, "expire", getDefaultExpireTime().Format(time.RFC3339), "Expire time of the certificates (run date command \"$(date -Ih --date='03/15/2016')\"), eg.: 2016-03-15T00+01:00")
+func downloadCert(domain string) ([]*x509.Certificate, error) {
 
-	flag.Parse()
+	conf := &tls.Config{
+		InsecureSkipVerify: true,
+	}
+
+	conn, err := tls.Dial("tcp", fmt.Sprintf("%s:%d", domain, 443), conf)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	return conn.ConnectionState().PeerCertificates, nil
 }
 
-func main() {
-
-	expire, err := getExpireTime(expireTime)
-
-	if err != nil {
-		log.Fatal(err)
-	}
+func checkFileCerts(certsRoot string, expire time.Time) []*x509.Certificate {
 
 	dirs := getCertDirectoryNames(certsRoot)
 
 	certificates := getCertificates(dirs)
 
-	expiringCerts := filterExpiringCerts(certificates, expire)
+	return filterExpiringCerts(certificates, expire)
+}
 
-	domains := collectExpirations(expiringCerts)
+func init() {
+	flag.StringVar(&pemName, "pem-name", "fullchain.pem", "The name of the pem file, usually fullchain.pem")
+	flag.StringVar(&certsRoot, "certs-path", "/etc/letsencrypt/live", "The path to the directory which stores the certificates")
+	flag.StringVar(&expireTime, "expire", "", "Expire time of the certificates (run date command \"$(date -Im --date='03/15/2016')\"), eg.: 2016-03-15T00+01:00. If empty, 2 weeks from now will be used")
+	flag.BoolVar(&printDate, "print-date", false, "Print the expiration date of the certificates")
+	flag.StringVar(&domains, "domains", "", "Comma separated list of domains to check")
 
-	printExpiringCerts(domains)
+	flag.Parse()
+}
+
+func checkDomainCerts(domainList []string, expire time.Time) []ExpiringCert {
+	var expiredDomains []ExpiringCert
+	for _, domain := range domainList {
+		certs, err := downloadCert(domain)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		for _, cert := range certs {
+			// fmt.Println("Checking domain: ", cert.DNSNames, cert.NotAfter, expire)
+			if cert.NotAfter.Before(expire) {
+				expiredDomains = append(expiredDomains, ExpiringCert{
+					Domains: cert.DNSNames,
+					Expire:  cert.NotAfter,
+				})
+			}
+
+		}
+	}
+	return expiredDomains
+}
+
+func getExpiredDomains(expire time.Time) []ExpiringCert {
+	if domains == "" {
+		expiringCerts := checkFileCerts(certsRoot, expire)
+		return collectExpirations(expiringCerts)
+	} else {
+		domainList := strings.Split(domains, ",")
+
+		return checkDomainCerts(domainList, expire)
+	}
+}
+
+func main() {
+	expire, err := expiration_time.GetExpireTime(expireTime)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	expiredDomains := getExpiredDomains(expire)
+	printExpiringCerts(expiredDomains, printDate)
 }
