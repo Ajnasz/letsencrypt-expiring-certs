@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
 	"flag"
@@ -22,21 +21,9 @@ var printDate bool
 var domains string
 var quit bool
 
-type CertPem struct {
-	Cert *x509.Certificate
-	Pem  []byte
-}
-
-func (certPem *CertPem) GetCertPool() *x509.CertPool {
-	pool := x509.NewCertPool()
-
-	ok := pool.AppendCertsFromPEM(certPem.Pem)
-
-	if !ok {
-		log.Fatal("Couldn't add pem")
-	}
-
-	return pool
+type CertVerifier interface {
+	Verify(time.Time) error
+	GetCert() *x509.Certificate
 }
 
 func NewCertPem(pem []byte) CertPem {
@@ -49,6 +36,40 @@ func NewCertPem(pem []byte) CertPem {
 	return certPem
 }
 
+type CertPem struct {
+	Cert *x509.Certificate
+	Pem  []byte
+}
+
+var _ CertVerifier = (*CertPem)(nil)
+
+func (certPem CertPem) getIntermediateCertPool() (*x509.CertPool, error) {
+	pool := x509.NewCertPool()
+
+	ok := pool.AppendCertsFromPEM(certPem.Pem)
+
+	if !ok {
+		return nil, fmt.Errorf("Failed to append certificate to pool")
+	}
+
+	return pool, nil
+}
+
+func (certPem CertPem) Verify(expire time.Time) error {
+	pool, err := certPem.getIntermediateCertPool()
+	if err != nil {
+		return err
+	}
+	options := x509.VerifyOptions{
+		CurrentTime:   expire,
+		Intermediates: pool,
+	}
+
+	_, err = certPem.Cert.Verify(options)
+
+	return err
+}
+
 func (certPem *CertPem) ParseCert() {
 	block, _ := pem.Decode(certPem.Pem)
 
@@ -59,6 +80,10 @@ func (certPem *CertPem) ParseCert() {
 	}
 
 	certPem.Cert = cert
+}
+
+func (certPem CertPem) GetCert() *x509.Certificate {
+	return certPem.Cert
 }
 
 func isDir(name string) bool {
@@ -105,22 +130,16 @@ func readPem(dir string) []byte {
 	return f
 }
 
-func filterExpiringCerts(certs []CertPem, expire time.Time) []*x509.Certificate {
+func filterExpiringCerts(certs []CertPem, expire time.Time) ([]*x509.Certificate, error) {
 	output := make([]*x509.Certificate, 0, len(certs))
 
 	for _, cert := range certs {
-
-		verifyOptions := x509.VerifyOptions{
-			CurrentTime:   expire,
-			Intermediates: cert.GetCertPool(),
-		}
-
-		if _, err := cert.Cert.Verify(verifyOptions); err != nil {
-			output = append(output, cert.Cert)
+		if err := cert.Verify(expire); err != nil {
+			output = append(output, cert.GetCert())
 		}
 	}
 
-	return output
+	return output, nil
 }
 
 func getCertificates(dirs []string) []CertPem {
@@ -130,7 +149,7 @@ func getCertificates(dirs []string) []CertPem {
 		certPath := path.Join(certsRoot, dir)
 		pem := readPem(certPath)
 
-		certPem := NewCertPem(pem)
+		var certPem CertPem = NewCertPem(pem)
 
 		certificates[index] = certPem
 	}
@@ -141,6 +160,7 @@ func getCertificates(dirs []string) []CertPem {
 type ExpiringCert struct {
 	Domains []string
 	Expire  time.Time
+	Error   error
 }
 
 func collectExpirations(expiringCerts []*x509.Certificate) []ExpiringCert {
@@ -167,7 +187,7 @@ func printExpiringCerts(expiringCerts []ExpiringCert, printDate bool) {
 	for _, cert := range expiringCerts {
 		for _, domain := range cert.Domains {
 			if printDate {
-				fmt.Printf("%s\t%s", domain, cert.Expire.Format(time.RFC3339))
+				fmt.Printf("%s\t%s\t%s", domain, cert.Expire.Format(time.RFC3339), cert.Error)
 			} else {
 				fmt.Printf("%s", domain)
 			}
@@ -176,21 +196,7 @@ func printExpiringCerts(expiringCerts []ExpiringCert, printDate bool) {
 	}
 }
 
-func downloadCert(domain string) ([]*x509.Certificate, error) {
-
-	conf := &tls.Config{
-		InsecureSkipVerify: true,
-	}
-
-	conn, err := tls.Dial("tcp", fmt.Sprintf("%s:%d", domain, 443), conf)
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-	return conn.ConnectionState().PeerCertificates, nil
-}
-
-func checkFileCerts(certsRoot string, expire time.Time) []*x509.Certificate {
+func checkFileCerts(certsRoot string, expire time.Time) ([]*x509.Certificate, error) {
 
 	dirs := getCertDirectoryNames(certsRoot)
 
@@ -210,32 +216,14 @@ func init() {
 	flag.Parse()
 }
 
-func checkDomainCerts(domainList []string, expire time.Time) []ExpiringCert {
-	var expiredDomains []ExpiringCert
-	for _, domain := range domainList {
-		certs, err := downloadCert(domain)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		for _, cert := range certs {
-			// fmt.Println("Checking domain: ", cert.DNSNames, cert.NotAfter, expire)
-			if cert.NotAfter.Before(expire) {
-				expiredDomains = append(expiredDomains, ExpiringCert{
-					Domains: cert.DNSNames,
-					Expire:  cert.NotAfter,
-				})
-			}
-
-		}
-	}
-	return expiredDomains
-}
-
-func getExpiredDomains(expire time.Time) []ExpiringCert {
+func getExpired(expire time.Time) ([]ExpiringCert, error) {
 	if domains == "" {
-		expiringCerts := checkFileCerts(certsRoot, expire)
-		return collectExpirations(expiringCerts)
+		expiringCerts, err := checkFileCerts(certsRoot, expire)
+		if err != nil {
+			return nil, err
+		}
+
+		return collectExpirations(expiringCerts), nil
 	} else {
 		domainList := strings.Split(domains, ",")
 
@@ -250,7 +238,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	expiredDomains := getExpiredDomains(expire)
+	expiredDomains, err := getExpired(expire)
+
+	if err != nil {
+		log.Fatal(err)
+	}
 	printExpiringCerts(expiredDomains, printDate)
 
 	if quit && len(expiredDomains) > 0 {

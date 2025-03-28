@@ -23,9 +23,9 @@ func TestCollectDomains(t *testing.T) {
 		t.Fatal("Domains length is different")
 	}
 
-	for index, domainList := range collectedDomains {
+	for index, expiringCert := range collectedDomains {
 		expected := len(data[index].DNSNames)
-		actual := len(domainList)
+		actual := len(expiringCert.Domains)
 
 		if actual != expected {
 			t.Fatal("Collected domains length is different than cert.DNSNames")
